@@ -2,7 +2,7 @@
   "name": "SupStack",
   "short_name": "SupStack",
   "description": "Supplement protocol manager",
-  "start_url": "./index.html",
+  "start_url": "./index-7.html",
   "display": "standalone",
   "background_color": "#FAFAF8",
   "theme_color": "#4ADE80",
