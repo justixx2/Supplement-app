@@ -1,4 +1,4 @@
-const CACHE='supstack-v1';
+const CACHE='supstack-v2';
 const ASSETS=['./index-7.html','./icon-192.png','./icon-512.png','./manifest.json'];
 
 self.addEventListener('install',e=>{
