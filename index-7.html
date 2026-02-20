@@ -83,6 +83,7 @@ const PRESETS=[
 {name:"CoQ10 (Ubiquinol)",cat:"fat-soluble",r:{wf:"fat",bt:"Evening",boost:"Use UBIQUINOL not ubiquinone. Essential if using pleurotus",confl:[],note:"Mitochondrial energy. Declines after 50. Heart. Dad's protocol."}},
 {name:"Fulvic Mineral Concentrate",cat:"mineral",r:{wf:"yes",bt:"Evening",boost:"Liquid in water. Start low dose",confl:[],note:"70+ trace minerals. Enhances absorption. Dad's protocol."}},
 {name:"Vitamin B Complex",cat:"water-soluble",r:{wf:"yes",bt:"Morning",boost:"Low-dose complex for balanced B support",confl:[],note:"Homocysteine control, energy, nervous system. Dad's protocol."}},
+{name:"Melatonin",cat:"other",r:{wf:"no",bt:"Before bed",boost:"Start lowest dose (0.3-0.5mg). Less is more",confl:[],note:"Sleep hormone. 30-60min before bed. Cycle — don't use daily long-term."}},
 ];
 const CC={"fat-soluble":"#F59E0B","water-soluble":"#3B82F6",mineral:"#10B981",adaptogen:"#8B5CF6",other:"#6B7280","amino-acid":"#EC4899","mineral-complex":"#14B8A6",protein:"#F97316"};
 const FI={fat:"\u{1F951}",yes:"\u{1F37D}\uFE0F",no:"\u{1F48A}"};
@@ -126,7 +127,7 @@ const Mt=({children})=><span style={{display:"inline-flex",alignItems:"center",g
 
 /* ─── SUPPLEMENT CARD (outside App — stable reference) ─── */
 function SC({s}){
-  const{tl,supps,timers,setEditing,setView,doTake,doUntake,hidden,setHidden,alerts}=useContext(Ctx);
+  const{tl,supps,timers,setEditing,setView,doTake,doUntake,hidden,setHidden,alerts,moveSup}=useContext(Ctx);
   const touchRef=useRef(null);
   const cardRef=useRef(null);
   const[offset,setOffset]=useState(0);
@@ -177,7 +178,11 @@ function SC({s}){
           <Elapsed iso={logEntry.time}/>
         </div>}
       </div>
-      <div style={{display:"flex",gap:5,alignItems:"center",marginLeft:6,flexShrink:0}}>
+      <div style={{display:"flex",gap:3,alignItems:"center",marginLeft:6,flexShrink:0}}>
+        <div style={{display:"flex",flexDirection:"column",gap:1}}>
+          <button onClick={()=>moveSup(s.id,-1)} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:"#D1D5DB",fontSize:10,lineHeight:1}}>▲</button>
+          <button onClick={()=>moveSup(s.id,1)} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:"#D1D5DB",fontSize:10,lineHeight:1}}>▼</button>
+        </div>
         <button onClick={()=>{setEditing(s);setView("add");}} style={{background:"none",border:"none",cursor:"pointer",padding:3,color:"#9CA3AF",fontSize:14}}>{"✏️"}</button>
         {done
           ?<button onClick={()=>doUntake(s.id)} style={{...Z.tb,background:"#4ADE80",color:"#fff"}}>{"✓"}</button>
@@ -366,7 +371,7 @@ useEffect(()=>{if(cRef.current)cRef.current.scrollTop=0},[view]);
 
 const tk=tdy(),tl=logs[tk]||{};
 const hiddenToday=hidden[tk]||[];
-const sorted=useMemo(()=>{const o={Morning:0,Midday:1,Evening:2,"Before bed":3,Anytime:4};return[...supps].sort((a,b)=>{if(a.times?.[0]&&b.times?.[0]){const ta=prsT(a.times[0]),tb=prsT(b.times[0]);if(ta&&tb)return(ta.h*60+ta.m)-(tb.h*60+tb.m);}return(o[a.bt]??4)-(o[b.bt]??4);})},[supps]);
+const sorted=supps;
 const visible=sorted.filter(s=>!hiddenToday.includes(s.id));
 const taken=Object.keys(tl).length,total=supps.length,pct=total>0?Math.round(taken/total*100):0;
 
@@ -375,9 +380,11 @@ const doForce=useCallback(()=>{if(!conflWarn)return;const s=conflWarn.s,t=tdy(),
 const doUntake=useCallback(id=>{const t=tdy();setLogs(p=>{const d={...(p[t]||{})};delete d[id];return{...p,[t]:d};});setTimers(p=>{const n={...p};delete n[id+"_t"];return n;});},[]);
 const saveSup=useCallback(f=>{if(editing?.id)setSupps(p=>p.map(s=>s.id===editing.id?{...f,id:s.id}:s));else setSupps(p=>[...p,{...f,id:uid()}]);setEditing(null);setView("home");},[editing]);
 const delSup=useCallback(id=>{setSupps(p=>p.filter(s=>s.id!==id));setEditing(null);setView("home");},[]);
-const addPreset=useCallback(p=>{setSupps(prev=>[...prev,{id:uid(),name:p.name,cat:p.cat,brand:"",dosage:"",form:"",times:[],wf:p.r.wf,es:p.r.wf==="no",bt:p.r.bt,boost:p.r.boost,confl:p.r.confl.map(c=>({n:c.n,m:c.m,eff:c.eff||""})),fi:"",note:p.r.note,stackId:null}]);setPresetOpen(false);},[]);
+const addPreset=useCallback(p=>{setSupps(prev=>{const cnt=prev.filter(s=>s.name===p.name||s.name.startsWith(p.name+" (")).length;const nm=cnt>0?p.name+" (Dose "+(cnt+1)+")":p.name;return[...prev,{id:uid(),name:nm,cat:p.cat,brand:"",dosage:"",form:"",times:[],wf:p.r.wf,es:p.r.wf==="no",bt:p.r.bt,boost:p.r.boost,confl:p.r.confl.map(c=>({n:c.n,m:c.m,eff:c.eff||""})),fi:"",note:p.r.note,stackId:null}];});},[]);
 const saveStk=useCallback(d=>{if(editStk?.id)setStacks(p=>p.map(s=>s.id===editStk.id?{...d,id:s.id}:s));else setStacks(p=>[...p,{...d,id:uid()}]);setEditStk(null);setStkName("");},[editStk]);
 const delStk=useCallback(id=>{setStacks(p=>p.filter(s=>s.id!==id));setSupps(p=>p.map(s=>s.stackId===id?{...s,stackId:null}:s));setEditStk(null);},[]);
+const moveSup=useCallback((id,dir)=>{setSupps(p=>{const i=p.findIndex(s=>s.id===id);const j=i+dir;if(j<0||j>=p.length)return p;const n=[...p];[n[i],n[j]]=[n[j],n[i]];return n;});},[]);
+const moveStk=useCallback((id,dir)=>{setStacks(p=>{const i=p.findIndex(s=>s.id===id);const j=i+dir;if(j<0||j>=p.length)return p;const n=[...p];[n[i],n[j]]=[n[j],n[i]];return n;});},[]);
 
 const doExport=useCallback(()=>{const d=JSON.stringify({supps,logs,stacks,protos,symptoms},null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="supstack-"+tdy()+".json";a.click();URL.revokeObjectURL(u);setToast("Exported!");setTimeout(()=>setToast(""),2e3);},[supps,logs,stacks,protos,symptoms]);
 const doImport=useCallback(e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.supps)setSupps(d.supps);if(d.logs)setLogs(d.logs);if(d.stacks)setStacks(d.stacks);setToast("Imported!");setTimeout(()=>setToast(""),2e3);}catch{setToast("Bad file");}};r.readAsText(f);e.target.value="";},[]);
@@ -388,7 +395,7 @@ const filtLib=useMemo(()=>{if(!libQ.trim())return library;const q=libQ.toLowerCa
 const unhide=(id)=>setHidden(p=>{const k=tdy();return{...p,[k]:(p[k]||[]).filter(x=>x!==id)};});
 
 /* ─── Context value ─── */
-const ctx=useMemo(()=>({supps,tl,timers,setEditing,setView,doTake,doUntake,hidden,setHidden,alerts}),[supps,tl,timers,doTake,doUntake,hidden,alerts]);
+const ctx=useMemo(()=>({supps,tl,timers,setEditing,setView,doTake,doUntake,hidden,setHidden,alerts,moveSup}),[supps,tl,timers,doTake,doUntake,hidden,alerts,moveSup]);
 
 /* ════════ RENDER VIEWS (inline, not components — no unmount/remount) ════════ */
 
@@ -417,7 +424,7 @@ const renderHome=()=>{
     </div>
     {presetOpen&&<div style={Z.mo}><div style={Z.mC} className="su">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:15,fontWeight:700}}>Presets</span><button onClick={()=>setPresetOpen(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#9CA3AF"}}>{"×"}</button></div>
-      <div style={{maxHeight:"60vh",overflowY:"auto"}}>{PRESETS.map((p,i)=>{const ad=supps.some(s=>s.name===p.name);return <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F3F4F6",opacity:ad?.5:1}}><div style={{flex:1}}><span style={{fontSize:12,fontWeight:600}}>{p.name}</span><p style={{fontSize:10,color:"#6B7280",margin:"1px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.r.note}</p></div><button onClick={()=>addPreset(p)} disabled={ad} style={{...Z.ab,opacity:ad?.4:1,marginLeft:6}}>{ad?"Added":"+ Add"}</button></div>;})}</div>
+      <div style={{maxHeight:"60vh",overflowY:"auto"}}>{PRESETS.map((p,i)=>{const cnt=supps.filter(s=>s.name===p.name||s.name.startsWith(p.name+" (")).length;return <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #F3F4F6"}}><div style={{flex:1}}><span style={{fontSize:12,fontWeight:600}}>{p.name}</span>{cnt>0&&<span style={{fontSize:9,color:"#4ADE80",marginLeft:4,fontWeight:700}}>×{cnt}</span>}<p style={{fontSize:10,color:"#6B7280",margin:"1px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.r.note}</p></div><button onClick={()=>addPreset(p)} style={{...Z.ab,marginLeft:6}}>+ Add</button></div>;})}</div>
     </div></div>}
     {conflWarn&&<div style={Z.mo}><div style={{...Z.mC,maxWidth:340}} className="su">
       <div style={{textAlign:"center",marginBottom:12}}>
@@ -530,7 +537,7 @@ const renderSettings=()=><div>
       <input style={Z.ip} value={stkName} onChange={e=>setStkName(e.target.value)} placeholder="Stack name..." autoFocus/>
       <div style={{display:"flex",gap:5}}><button onClick={()=>{if(stkName.trim())saveStk({...editStk,name:stkName.trim()});}} style={Z.ab}>Save</button><button onClick={()=>{setEditStk(null);setStkName("");}} style={{...Z.ab,background:"#F3F4F6",color:"#6B7280"}}>Cancel</button></div>
     </div>}
-    {stacks.map(sk=><div key={sk.id} style={{background:"#F9FAFB",borderRadius:9,padding:"8px 10px",marginBottom:4}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:600}}>{sk.name}</span><p style={{fontSize:10,color:"#6B7280",margin:"1px 0 0"}}>{supps.filter(s=>s.stackId===sk.id).length} supps</p></div><div style={{display:"flex",gap:4}}><button onClick={()=>{setEditStk(sk);setStkName(sk.name);}} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF"}}>{"✏️"}</button><button onClick={()=>{if(confirm("Delete?"))delStk(sk.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}>{"🗑️"}</button></div></div></div>)}
+    {stacks.map((sk,i)=><div key={sk.id} style={{background:"#F9FAFB",borderRadius:9,padding:"8px 10px",marginBottom:4}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:600}}>{sk.name}</span><p style={{fontSize:10,color:"#6B7280",margin:"1px 0 0"}}>{supps.filter(s=>s.stackId===sk.id).length} supps</p></div><div style={{display:"flex",gap:4,alignItems:"center"}}><button onClick={()=>moveStk(sk.id,-1)} disabled={i===0} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:i===0?"#E5E7EB":"#9CA3AF",fontSize:10}}>▲</button><button onClick={()=>moveStk(sk.id,1)} disabled={i===stacks.length-1} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:i===stacks.length-1?"#E5E7EB":"#9CA3AF",fontSize:10}}>▼</button><button onClick={()=>{setEditStk(sk);setStkName(sk.name);}} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF"}}>{"✏️"}</button><button onClick={()=>{if(confirm("Delete?"))delStk(sk.id);}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}>{"🗑️"}</button></div></div></div>)}
   </div>
   <div style={{...Z.fc,marginBottom:12}}>
     <span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:6}}>{"🔔"} Alerts</span>
@@ -555,7 +562,7 @@ const renderSettings=()=><div>
   </div>
   <div style={{...Z.fc,marginBottom:12}}>
     <span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:6}}>{"📦"} All Supplements ({supps.length})</span>
-    {supps.map(s=><div key={s.id} style={{background:"#F9FAFB",borderRadius:9,padding:"8px 10px",marginBottom:3}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,fontWeight:600}}>{s.name}</span><button onClick={()=>{setEditing(s);setView("add");}} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF"}}>{"✏️"}</button></div></div>)}
+    {supps.map((s,i)=><div key={s.id} style={{background:"#F9FAFB",borderRadius:9,padding:"8px 10px",marginBottom:3}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:11,fontWeight:600}}>{s.name}</span><div style={{display:"flex",gap:3,alignItems:"center"}}><button onClick={()=>moveSup(s.id,-1)} disabled={i===0} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:i===0?"#E5E7EB":"#9CA3AF",fontSize:10}}>▲</button><button onClick={()=>moveSup(s.id,1)} disabled={i===supps.length-1} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:i===supps.length-1?"#E5E7EB":"#9CA3AF",fontSize:10}}>▼</button><button onClick={()=>{setEditing(s);setView("add");}} style={{background:"none",border:"none",cursor:"pointer",color:"#9CA3AF"}}>{"✏️"}</button></div></div></div>)}
   </div>
   <div style={{height:80}}/>
 </div>;
