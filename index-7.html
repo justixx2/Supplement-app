@@ -188,6 +188,34 @@ function SC({s}){
   </div>;
 }
 
+/* ─── COMPACT CARD ─── */
+function SCC({s}){
+  const{tl,supps,timers,doTake,doUntake}=useContext(Ctx);
+  const getMyConf=()=>{
+    const c=[];
+    if(s.confl?.length){for(const cf of s.confl){const cs=supps.find(x=>x.name===cf.n);if(!cs)continue;const tt=timers[cs.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req)c.push({name:cs.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}
+    for(const os of supps){if(os.id===s.id||!os.confl?.length)continue;for(const cf of os.confl){if(cf.n!==s.name)continue;const tt=timers[os.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===os.name))c.push({name:os.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}
+    return c;
+  };
+  const cf=getMyConf();
+  const done=!!tl[s.id];
+  const blocked=!done&&cf.length>0;
+  const short=s.name.replace(/\(.*?\)/g,"").replace(/\/.*/,"").replace(/ (Bisglycinate|Glycinate|Picolinate|Gluconate|Citrate|Malate|Threonate|Taurate|Complex|Carnosine|Monnieri|Phosphate|Ascorbate)/gi,"").replace(/Vitamin /,"Vit ").replace(/Magnesium/,"Mag").replace(/Lactobacillus/,"L.").replace(/Saccharomyces/,"S.").replace(/N-Acetyl /,"").replace(/with /,"+ ").trim();
+  const cc=CC[s.cat]||"#6B7280";
+  return <button onClick={()=>{if(done)doUntake(s.id);else doTake(s,cf);}}
+    style={{display:"flex",alignItems:"center",gap:3,padding:"5px 6px",borderRadius:8,border:done?"2px solid #4ADE80":blocked?"2px solid #FCD34D":"1.5px solid #E5E7EB",
+      background:done?"#F0FDF4":blocked?"#FFFBEB":"#fff",cursor:"pointer",minWidth:0,flex:"1 1 calc(33.3% - 4px)",maxWidth:"calc(33.3% - 4px)",boxShadow:"0 1px 2px rgba(0,0,0,.03)"}}>
+    <span style={{width:14,height:14,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,flexShrink:0,
+      background:done?"#4ADE80":blocked?"#FCD34D":"#F3F4F6",color:done?"#fff":blocked?"#92400E":"#D1D5DB"}}>
+      {done?"✓":blocked?"!":"✓"}
+    </span>
+    <span style={{fontSize:10,fontWeight:done?700:600,color:done?"#16A34A":blocked?"#92400E":"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"left",lineHeight:1.1}}>
+      {short}
+    </span>
+    {blocked&&<span style={{fontSize:7,color:"#D97706",flexShrink:0}}>{Math.ceil(cf[0].rem)}m</span>}
+  </button>;
+}
+
 /* ─── FORM (outside App — stable, keeps own state across App re-renders) ─── */
 function SF({init,onSave,onDel,onBack,supps,stacks}){
 const[f,sF]=useState(init||{name:"",cat:"other",brand:"",dosage:"",times:[],wf:"yes",es:false,bt:"Morning",boost:"",confl:[],fi:"",note:"",stackId:null});
@@ -303,6 +331,7 @@ const[presetOpen,setPresetOpen]=useState(false);
 const[conflWarn,setConflWarn]=useState(null);
 const[histDate,setHistDate]=useState(tdy());
 const[symOpen,setSymOpen]=useState(false);
+const[compact,setCompact]=useLS("ss3_compact",false);
 const[editStk,setEditStk]=useState(null);
 const[stkName,setStkName]=useState("");
 const[toast,setToast]=useState("");
@@ -384,6 +413,7 @@ const renderHome=()=>{
     <div style={{display:"flex",gap:7,marginBottom:12}}>
       <button onClick={()=>{setEditing(null);setView("add");}} style={Z.qa}>{"+"} Add New</button>
       <button onClick={()=>setPresetOpen(true)} style={Z.qa}>{"💊"} Preset</button>
+      <button onClick={()=>setCompact(p=>!p)} style={{...Z.qa,flex:"0 0 auto",padding:"10px 12px",background:compact?"#ECFDF5":"#fff",borderColor:compact?"#4ADE80":"#E5E7EB"}}>{compact?"▤":"▦"}</button>
     </div>
     {presetOpen&&<div style={Z.mo}><div style={Z.mC} className="su">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:15,fontWeight:700}}>Presets</span><button onClick={()=>setPresetOpen(false)} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#9CA3AF"}}>{"×"}</button></div>
@@ -409,12 +439,23 @@ const renderHome=()=>{
         <button onClick={doForce} style={{...Z.pb,background:"#F59E0B",color:"#fff"}}>Take Anyway</button>
       </div>
     </div></div>}
+    {compact?<div>
+      {Object.keys(sgs).map(sid=>{const sk=stacks.find(s=>s.id===sid),ss=sgs[sid],at=ss.every(s=>tl[s.id]);
+        return <div key={sid} style={{marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}><span style={{fontSize:10,fontWeight:700,color:at?"#16A34A":"#9CA3AF"}}>{sk?.name||"Stack"}{at?" ✓":""}</span></div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{ss.map(s=><SCC key={s.id} s={s}/>)}</div>
+        </div>;})}
+      {ug.length>0&&<div>{Object.keys(sgs).length>0&&<p style={{fontSize:10,fontWeight:600,color:"#9CA3AF",margin:"4px 0 3px"}}>Individual</p>}
+        <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{ug.map(s=><SCC key={s.id} s={s}/>)}</div>
+      </div>}
+    </div>:<div>
     {Object.keys(sgs).map(sid=>{const sk=stacks.find(s=>s.id===sid),ss=sgs[sid],at=ss.every(s=>tl[s.id]);
       return <div key={sid} style={{marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}><span style={{fontSize:12,fontWeight:700,color:"#374151"}}>{sk?.name||"Stack"}</span>{at&&<span style={{fontSize:10,color:"#16A34A",fontWeight:600}}>All done</span>}</div>
         <div style={{borderLeft:"2px solid #E5E7EB",paddingLeft:10,marginLeft:3}}>{ss.map(s=><SC key={s.id} s={s}/>)}</div>
       </div>;})}
     {ug.length>0&&<div>{Object.keys(sgs).length>0&&<p style={{fontSize:11,fontWeight:600,color:"#9CA3AF",margin:"0 0 5px"}}>Individual</p>}{ug.map(s=><SC key={s.id} s={s}/>)}</div>}
+    </div>}
     {hiddenToday.length>0&&<div style={{marginTop:8}}>
       <p style={{fontSize:11,color:"#9CA3AF",marginBottom:4}}>{"👋"} {hiddenToday.length} hidden today</p>
       <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{hiddenToday.map(id=>{const s=supps.find(x=>x.id===id);if(!s)return null;return <button key={id} onClick={()=>unhide(id)} style={{fontSize:10,background:"#F3F4F6",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",color:"#6B7280"}}>{s.name} ×</button>;})}</div>
