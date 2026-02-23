@@ -337,6 +337,7 @@ const[conflWarn,setConflWarn]=useState(null);
 const[histDate,setHistDate]=useState(tdy());
 const[symOpen,setSymOpen]=useState(false);
 const[compact,setCompact]=useLS("ss3_compact",false);
+const[activeProtocol,setActiveProtocol]=useLS("ss3_ap",null);
 const[editStk,setEditStk]=useState(null);
 const[stkName,setStkName]=useState("");
 const[toast,setToast]=useState("");
@@ -404,9 +405,13 @@ const renderHome=()=>{
   const gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening";
   const sgs={},ug=[];visible.forEach(s=>{if(s.stackId){if(!sgs[s.stackId])sgs[s.stackId]=[];sgs[s.stackId].push(s);}else ug.push(s);});
   return <div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-      <div><p style={{fontSize:12,color:"#9CA3AF",margin:0}}>{gr}</p><h1 style={{fontSize:20,fontWeight:800,color:"#111",margin:"1px 0 0"}}>{"💊"} My Protocol</h1></div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div><p style={{fontSize:12,color:"#9CA3AF",margin:0}}>{gr}</p><h1 style={{fontSize:20,fontWeight:800,color:"#111",margin:"1px 0 0"}}>{"💊"} {(()=>{const ap=protos.find(p=>p.id===activeProtocol);return ap?ap.name:"My Protocol";})()}</h1></div>
       <button onClick={()=>setSymOpen(true)} style={{background:"#F3F4F6",border:"none",borderRadius:12,width:36,height:36,cursor:"pointer",fontSize:15}}>{"📊"}</button>
+    </div>
+    <div style={{overflowX:"auto",display:"flex",gap:6,marginBottom:12,paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none"}}>
+      {protos.map(p=>{const isA=activeProtocol===p.id;return<button key={p.id} onClick={()=>{if(!isA){setSupps(p.supps);if(p.stacks)setStacks(p.stacks);setActiveProtocol(p.id);}}} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:isA?"2px solid #4ADE80":"1.5px solid #E5E7EB",background:isA?"#ECFDF5":"#fff",color:isA?"#059669":"#374151",fontSize:12,fontWeight:isA?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>{isA?"✓ ":""}{p.name}</button>;})}
+      <button onClick={()=>{const n=prompt("Protocol name:");if(n){const newId=uid();setProtos(prev=>[...prev,{id:newId,name:n,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}]);setActiveProtocol(newId);}}} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:"1.5px dashed #D1D5DB",background:"transparent",color:"#9CA3AF",fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>{"+"} Save</button>
     </div>
     <div style={{background:"linear-gradient(135deg,#ECFDF5,#D1FAE5)",borderRadius:20,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div>
@@ -552,8 +557,9 @@ const renderSettings=()=><div>
   </div>
   <div style={{...Z.fc,marginBottom:12}}>
     <span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:6}}>{"📋"} Protocols</span>
-    <button onClick={()=>{const n=prompt("Name:");if(n)setProtos(p=>[...p,{id:uid(),name:n,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}]);}} style={Z.ab}>Save Current</button>
-    {protos.map(p=><div key={p.id} style={{background:"#F9FAFB",borderRadius:9,padding:"8px 10px",marginTop:5}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:11,fontWeight:600}}>{p.name}</span><p style={{fontSize:9,color:"#9CA3AF",margin:0}}>{p.supps.length} supps</p></div><div style={{display:"flex",gap:4}}><button onClick={()=>{if(confirm("Load?")){setSupps(p.supps);if(p.stacks)setStacks(p.stacks);}}} style={Z.ab}>Load</button><button onClick={()=>{if(confirm("Delete?"))setProtos(prev=>prev.filter(x=>x.id!==p.id));}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}>{"🗑️"}</button></div></div></div>)}
+    <button onClick={()=>{const n=prompt("Name:");if(n){const newId=uid();setProtos(p=>[...p,{id:newId,name:n,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}]);setActiveProtocol(newId);}}} style={Z.ab}>Save Current</button>
+    {protos.map(p=>{const isA=activeProtocol===p.id;return<div key={p.id} style={{background:isA?"#ECFDF5":"#F9FAFB",borderRadius:9,padding:"8px 10px",marginTop:5,border:isA?"1.5px solid #A7F3D0":"1.5px solid transparent"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:11,fontWeight:600}}>{p.name}</span>{isA&&<span style={{fontSize:9,background:"#4ADE80",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:700}}>Active</span>}</div><p style={{fontSize:9,color:"#9CA3AF",margin:0}}>{p.supps.length} supps · {new Date(p.at).toLocaleDateString()}</p></div><div style={{display:"flex",gap:4}}><button onClick={()=>{if(confirm("Load "+p.name+"?")){setSupps(p.supps);if(p.stacks)setStacks(p.stacks);setActiveProtocol(p.id);}}} style={Z.ab}>Load</button><button onClick={()=>{if(confirm("Delete "+p.name+"?")){setProtos(prev=>prev.filter(x=>x.id!==p.id));if(activeProtocol===p.id)setActiveProtocol(null);}}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}>{"🗑️"}</button></div></div></div>;})}
+    {protos.length===0&&<p style={{fontSize:11,color:"#9CA3AF",margin:"6px 0 0"}}>No protocols saved yet. Tap "Save Current" to save your supplement list as a protocol.</p>}
   </div>
   <div style={{...Z.fc,marginBottom:12}}>
     <span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:6}}>{"💾"} Backup</span>
