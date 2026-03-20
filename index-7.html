@@ -388,7 +388,9 @@ const moveSup=useCallback((id,dir)=>{setSupps(p=>{const i=p.findIndex(s=>s.id===
 const moveStk=useCallback((id,dir)=>{setStacks(p=>{const i=p.findIndex(s=>s.id===id);const j=i+dir;if(j<0||j>=p.length)return p;const n=[...p];[n[i],n[j]]=[n[j],n[i]];return n;});},[]);
 
 const doExport=useCallback(()=>{const d=JSON.stringify({supps,logs,stacks,protos,symptoms},null,2);const b=new Blob([d],{type:"application/json"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download="supstack-"+tdy()+".json";a.click();URL.revokeObjectURL(u);setToast("Exported!");setTimeout(()=>setToast(""),2e3);},[supps,logs,stacks,protos,symptoms]);
-const doImport=useCallback(e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.supps)setSupps(d.supps);if(d.logs)setLogs(d.logs);if(d.stacks)setStacks(d.stacks);setToast("Imported!");setTimeout(()=>setToast(""),2e3);}catch{setToast("Bad file");}};r.readAsText(f);e.target.value="";},[]);
+const doImport=useCallback(e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.supps)setSupps(d.supps);if(d.logs)setLogs(d.logs);if(d.stacks)setStacks(d.stacks);if(d.protos)setProtos(d.protos);if(d.symptoms)setSymptoms(d.symptoms);setToast("Imported!");setTimeout(()=>setToast(""),2e3);}catch{setToast("Bad file");}};r.readAsText(f);e.target.value="";},[]);
+const doProtoImport=useCallback(e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(!d.protocolName){setToast("Missing protocolName");setTimeout(()=>setToast(""),2500);return;}if(!d.supplements||!Array.isArray(d.supplements)||!d.supplements.length){setToast("Missing supplements array");setTimeout(()=>setToast(""),2500);return;}const newStacks=[];const stackMap={};if(d.stacks&&Array.isArray(d.stacks)){d.stacks.forEach(s=>{const sid=uid();newStacks.push({id:sid,name:s});stackMap[s]=sid;});}const newSupps=d.supplements.map(s=>{let stackId=null;if(s.stack&&stackMap[s.stack])stackId=stackMap[s.stack];else if(s.stack){const sid=uid();newStacks.push({id:sid,name:s.stack});stackMap[s.stack]=sid;stackId=sid;}return{id:uid(),name:s.name||"Unknown",cat:s.category||"other",brand:s.brand||"",dosage:s.dosage||"",times:s.times||[],wf:s.withFood==="fat"?"fat":s.withFood==="no"||s.emptyStomach?"no":"yes",es:s.emptyStomach||s.withFood==="no"||false,bt:s.bestTime||"Anytime",boost:s.boost||s.absorptionTips||"",confl:(s.conflicts||[]).map(c=>({n:c.name||c.n||"",m:c.minutes||c.m||120,eff:c.effect||c.eff||""})),fi:s.foodInteractions||"",note:s.note||s.notes||"",stackId};});const newId=uid();const proto={id:newId,name:d.protocolName,supps:newSupps,stacks:newStacks,at:new Date().toISOString()};setProtos(p=>[...p,proto]);setToast("Protocol '"+d.protocolName+"' imported! Go to Protocols to load it.");setTimeout(()=>setToast(""),3e3);}catch(err){setToast("Invalid protocol JSON");setTimeout(()=>setToast(""),2500);}};r.readAsText(f);e.target.value="";},[]);
+const updateActiveProto=useCallback(()=>{if(!activeProtocol)return;setProtos(p=>p.map(pr=>pr.id===activeProtocol?{...pr,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}:pr));setToast("Protocol updated!");setTimeout(()=>setToast(""),2e3);},[activeProtocol,supps,stacks]);
 const doLibImport=useCallback(e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const data=JSON.parse(ev.target.result);const arr=Array.isArray(data)?data:[data];const valid=arr.filter(i=>i.name);if(!valid.length){setLibMsg("No valid entries");setTimeout(()=>setLibMsg(""),2500);return;}setLibrary(prev=>{const merged=[...prev];let added=0;for(const item of valid){if(!merged.some(m=>m.name.toLowerCase()===item.name.toLowerCase())){merged.push({...item,_id:uid()});added++;}}setLibMsg("Added "+added+" new, "+(valid.length-added)+" skipped");setTimeout(()=>setLibMsg(""),3e3);return merged;});}catch{setLibMsg("Invalid JSON");setTimeout(()=>setLibMsg(""),2500);}};r.readAsText(f);e.target.value="";},[]);
 const doLibDel=useCallback(id=>{setLibrary(p=>p.filter(x=>x._id!==id));if(libExp===id)setLibExp(null);},[libExp]);
 const filtLib=useMemo(()=>{if(!libQ.trim())return library;const q=libQ.toLowerCase();return library.filter(s=>s.name?.toLowerCase().includes(q)||s.aliases?.some(a=>a.toLowerCase().includes(q))||s.category?.toLowerCase().includes(q)||s.tags?.some(t=>t.toLowerCase().includes(q))||s.description?.toLowerCase().includes(q));},[library,libQ]);
@@ -410,8 +412,9 @@ const renderHome=()=>{
       <button onClick={()=>setSymOpen(true)} style={{background:"#F3F4F6",border:"none",borderRadius:12,width:36,height:36,cursor:"pointer",fontSize:15}}>{"📊"}</button>
     </div>
     <div style={{overflowX:"auto",display:"flex",gap:6,marginBottom:12,paddingBottom:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none",msOverflowStyle:"none"}}>
-      {protos.map(p=>{const isA=activeProtocol===p.id;return<button key={p.id} onClick={()=>{if(!isA){setSupps(p.supps);if(p.stacks)setStacks(p.stacks);setActiveProtocol(p.id);}}} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:isA?"2px solid #4ADE80":"1.5px solid #E5E7EB",background:isA?"#ECFDF5":"#fff",color:isA?"#059669":"#374151",fontSize:12,fontWeight:isA?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>{isA?"✓ ":""}{p.name}</button>;})}
+      {protos.map(p=>{const isA=activeProtocol===p.id;return<button key={p.id} onClick={()=>{if(!isA){setSupps(JSON.parse(JSON.stringify(p.supps)));if(p.stacks)setStacks(JSON.parse(JSON.stringify(p.stacks)));setActiveProtocol(p.id);}}} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:isA?"2px solid #4ADE80":"1.5px solid #E5E7EB",background:isA?"#ECFDF5":"#fff",color:isA?"#059669":"#374151",fontSize:12,fontWeight:isA?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>{isA?"✓ ":""}{p.name}</button>;})}
       <button onClick={()=>{const n=prompt("Protocol name:");if(n){const newId=uid();setProtos(prev=>[...prev,{id:newId,name:n,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}]);setActiveProtocol(newId);}}} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:"1.5px dashed #D1D5DB",background:"transparent",color:"#9CA3AF",fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>{"+"} Save</button>
+      {activeProtocol&&<button onClick={()=>{if(confirm("Update active protocol with current supplements?"))updateActiveProto();}} style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:"1.5px solid #FCD34D",background:"#FEF9C3",color:"#92400E",fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>{"🔄"} Update</button>}
     </div>
     <div style={{background:"linear-gradient(135deg,#ECFDF5,#D1FAE5)",borderRadius:20,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
       <div>
@@ -557,9 +560,119 @@ const renderSettings=()=><div>
   </div>
   <div style={{...Z.fc,marginBottom:12}}>
     <span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:6}}>{"📋"} Protocols</span>
-    <button onClick={()=>{const n=prompt("Name:");if(n){const newId=uid();setProtos(p=>[...p,{id:newId,name:n,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}]);setActiveProtocol(newId);}}} style={Z.ab}>Save Current</button>
-    {protos.map(p=>{const isA=activeProtocol===p.id;return<div key={p.id} style={{background:isA?"#ECFDF5":"#F9FAFB",borderRadius:9,padding:"8px 10px",marginTop:5,border:isA?"1.5px solid #A7F3D0":"1.5px solid transparent"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:11,fontWeight:600}}>{p.name}</span>{isA&&<span style={{fontSize:9,background:"#4ADE80",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:700}}>Active</span>}</div><p style={{fontSize:9,color:"#9CA3AF",margin:0}}>{p.supps.length} supps · {new Date(p.at).toLocaleDateString()}</p></div><div style={{display:"flex",gap:4}}><button onClick={()=>{if(confirm("Load "+p.name+"?")){setSupps(p.supps);if(p.stacks)setStacks(p.stacks);setActiveProtocol(p.id);}}} style={Z.ab}>Load</button><button onClick={()=>{if(confirm("Delete "+p.name+"?")){setProtos(prev=>prev.filter(x=>x.id!==p.id));if(activeProtocol===p.id)setActiveProtocol(null);}}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}>{"🗑️"}</button></div></div></div>;})}
+    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+      <button onClick={()=>{const n=prompt("Name:");if(n){const newId=uid();setProtos(p=>[...p,{id:newId,name:n,supps:JSON.parse(JSON.stringify(supps)),stacks:JSON.parse(JSON.stringify(stacks)),at:new Date().toISOString()}]);setActiveProtocol(newId);}}} style={Z.ab}>{"+"} Save Current</button>
+      {activeProtocol&&<button onClick={()=>{if(confirm("Update active protocol with current supplements?"))updateActiveProto();}} style={{...Z.ab,background:"#FEF9C3",borderColor:"#FCD34D",color:"#92400E"}}>{"🔄"} Update Active</button>}
+      <label style={{...Z.ab,cursor:"pointer"}}>{"📂"} Import Protocol<input type="file" accept=".json" onChange={doProtoImport} style={{display:"none"}}/></label>
+    </div>
+    {protos.map(p=>{const isA=activeProtocol===p.id;return<div key={p.id} style={{background:isA?"#ECFDF5":"#F9FAFB",borderRadius:9,padding:"8px 10px",marginTop:5,border:isA?"1.5px solid #A7F3D0":"1.5px solid transparent"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{display:"flex",alignItems:"center",gap:5}}><span style={{fontSize:11,fontWeight:600}}>{p.name}</span>{isA&&<span style={{fontSize:9,background:"#4ADE80",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:700}}>Active</span>}</div><p style={{fontSize:9,color:"#9CA3AF",margin:0}}>{p.supps.length} supps · {new Date(p.at).toLocaleDateString()}</p></div><div style={{display:"flex",gap:4}}><button onClick={()=>{if(confirm("Load "+p.name+"?")){setSupps(JSON.parse(JSON.stringify(p.supps)));if(p.stacks)setStacks(JSON.parse(JSON.stringify(p.stacks)));setActiveProtocol(p.id);}}} style={Z.ab}>Load</button><button onClick={()=>{if(confirm("Delete "+p.name+"?")){setProtos(prev=>prev.filter(x=>x.id!==p.id));if(activeProtocol===p.id)setActiveProtocol(null);}}} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444"}}>{"🗑️"}</button></div></div></div>;})}
     {protos.length===0&&<p style={{fontSize:11,color:"#9CA3AF",margin:"6px 0 0"}}>No protocols saved yet. Tap "Save Current" to save your supplement list as a protocol.</p>}
+    {toast&&<p style={{fontSize:10,color:"#16A34A",marginTop:5}}>{toast}</p>}
+  </div>
+  <div style={{...Z.fc,marginBottom:12}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+      <span style={{fontSize:13,fontWeight:700}}>{"🤖"} Protocol JSON Format</span>
+    </div>
+    <p style={{fontSize:10,color:"#6B7280",margin:"0 0 8px"}}>Use this template with AI (ChatGPT, Claude, etc.) to generate a protocol JSON file you can import above. Give AI this format and ask it to create a supplement protocol for your goals.</p>
+    <div style={{background:"#1a1a2e",borderRadius:12,padding:12,overflow:"auto",maxHeight:400}}>
+      <pre style={{fontSize:9,color:"#E2E8F0",margin:0,whiteSpace:"pre-wrap",lineHeight:1.5}}>{`{
+  "protocolName": "My Health Protocol",
+  "description": "Optional description of the protocol",
+  "stacks": ["Morning Empty Stomach", "Morning With Food", "Evening", "Before Bed"],
+  "supplements": [
+    {
+      "name": "Magnesium Glycinate",
+      "category": "mineral",
+      "brand": "Thorne",
+      "dosage": "400mg",
+      "times": ["09:00 PM"],
+      "bestTime": "Before bed",
+      "withFood": "no",
+      "emptyStomach": true,
+      "boost": "Take away from calcium and zinc for best absorption",
+      "absorptionTips": "",
+      "conflicts": [
+        {
+          "name": "Iron Bisglycinate",
+          "minutes": 120,
+          "effect": "Magnesium interferes with iron absorption"
+        }
+      ],
+      "foodInteractions": "Avoid with high-fiber meals",
+      "notes": "Calming form of magnesium, great for sleep and muscle relaxation",
+      "stack": "Before Bed"
+    },
+    {
+      "name": "Vitamin D3",
+      "category": "fat-soluble",
+      "brand": "",
+      "dosage": "5000 IU",
+      "times": ["08:00 AM"],
+      "bestTime": "Morning",
+      "withFood": "fat",
+      "emptyStomach": false,
+      "boost": "Always pair with K2. Take with fatty meal",
+      "conflicts": [],
+      "foodInteractions": "",
+      "notes": "Fat-soluble vitamin. Immune support, mood, bones",
+      "stack": "Morning With Food"
+    }
+  ]
+}
+
+CATEGORIES (use one):
+  "fat-soluble", "water-soluble", "mineral",
+  "adaptogen", "other", "amino-acid",
+  "mineral-complex", "protein"
+
+BEST TIME (use one):
+  "Morning", "Midday", "Evening",
+  "Before bed", "Anytime"
+
+WITH FOOD (use one):
+  "yes"  = take with food
+  "no"   = empty stomach
+  "fat"  = take with fat/fatty meal
+
+TIMES FORMAT: ["08:00 AM", "02:00 PM"]
+  Use 12-hour format with AM/PM
+
+CONFLICTS: list supplements that should
+  NOT be taken close together, with wait
+  time in minutes and the reason why.
+
+STACKS: group supplements by when/how
+  you take them. Each supplement's "stack"
+  field should match a stack name.`}</pre>
+    </div>
+    <button onClick={()=>{const tmpl=`{
+  "protocolName": "My Protocol Name",
+  "description": "Description of the protocol goals",
+  "stacks": ["Morning Empty Stomach", "Morning With Food", "Evening", "Before Bed"],
+  "supplements": [
+    {
+      "name": "Supplement Name",
+      "category": "mineral",
+      "brand": "",
+      "dosage": "500mg",
+      "times": ["08:00 AM"],
+      "bestTime": "Morning",
+      "withFood": "yes",
+      "emptyStomach": false,
+      "boost": "Absorption tips here",
+      "conflicts": [
+        {
+          "name": "Conflicting Supplement Name",
+          "minutes": 120,
+          "effect": "Why they conflict"
+        }
+      ],
+      "foodInteractions": "",
+      "notes": "What this supplement does and why you take it",
+      "stack": "Morning With Food"
+    }
+  ]
+}`;navigator.clipboard.writeText(tmpl).then(()=>{setToast("Template copied!");setTimeout(()=>setToast(""),2e3);}).catch(()=>{const w=window.open();w.document.write("<pre>"+tmpl+"</pre>");});}} style={{...Z.ab,width:"100%",justifyContent:"center",marginTop:8}}>{"📋"} Copy Template to Clipboard</button>
   </div>
   <div style={{...Z.fc,marginBottom:12}}>
     <span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:6}}>{"💾"} Backup</span>
