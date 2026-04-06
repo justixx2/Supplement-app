@@ -342,6 +342,31 @@ return <div style={{...Z.fc,marginBottom:12}}>
 </div>;
 }
 
+/* ─── REMINDER BAR (floating bottom, self-ticking) ─── */
+function ReminderBar({reminders,onDismiss}){
+  const[,tick]=useState(0);
+  useEffect(()=>{const i=setInterval(()=>tick(t=>t+1),15000);return()=>clearInterval(i)},[]);
+  const now=Date.now();
+  const active=reminders.filter(r=>{const el=(now-r.startedAt)/60000;return el<r.minutes;});
+  useEffect(()=>{if(active.length<reminders.length){const expiredIds=reminders.filter(r=>(now-r.startedAt)/60000>=r.minutes).map(r=>r.id);if(expiredIds.length)onDismiss(expiredIds);}},[active.length]);
+  if(!active.length)return null;
+  return <div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,zIndex:150,padding:"0 8px",pointerEvents:"none"}}>
+    <div style={{background:"rgba(30,64,175,.95)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",borderRadius:14,padding:"8px 10px",boxShadow:"0 4px 20px rgba(0,0,0,.2)",pointerEvents:"auto"}}>
+      {active.map(r=>{const el=(now-r.startedAt)/60000;const rem=Math.ceil(r.minutes-el);
+        return <div key={r.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0",borderBottom:active.indexOf(r)<active.length-1?"1px solid rgba(255,255,255,.15)":"none"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#fff"}}>{"📋"} {r.name}</span>
+              <span style={{fontSize:9,color:"#93C5FD",fontWeight:600}}>{rem}min left</span>
+            </div>
+            <span style={{fontSize:9,color:"#BFDBFE"}}>{r.supp} — {r.eff||"avoid for "+r.minutes+"min"}</span>
+          </div>
+          <button onClick={()=>onDismiss([r.id])} style={{background:"none",border:"none",color:"#93C5FD",fontSize:14,cursor:"pointer",padding:"0 2px",flexShrink:0}}>{"×"}</button>
+        </div>;})}
+    </div>
+  </div>;
+}
+
 /* ════════════════════ MAIN APP ════════════════════ */
 function App(){
 const[supps,setSupps]=useLS("ss3_s",[]);
@@ -366,6 +391,7 @@ const[activeProtocol,setActiveProtocol]=useLS("ss3_ap",null);
 const[editStk,setEditStk]=useState(null);
 const[stkName,setStkName]=useState("");
 const[toast,setToast]=useState("");
+const[activeReminders,setActiveReminders]=useState([]);
 const[libQ,setLibQ]=useState("");
 const[libExp,setLibExp]=useState(null);
 const[libMsg,setLibMsg]=useState("");
@@ -401,8 +427,9 @@ const sorted=supps;
 const visible=sorted.filter(s=>!hiddenToday.includes(s.id));
 const taken=Object.keys(tl).length,total=supps.length,pct=total>0?Math.round(taken/total*100):0;
 
-const doTake=useCallback((s,cf,reminders)=>{if(cf&&cf.length){setConflWarn({s,c:cf,reminders:reminders||[]});return;}if(reminders&&reminders.length){setConflWarn({s,c:[],reminders});return;}const t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:""}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));},[]);
-const doForce=useCallback(()=>{if(!conflWarn)return;const s=conflWarn.s,t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:"Override"}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));setConflWarn(null);},[conflWarn]);
+const addReminders=(suppName,rems)=>{if(!rems||!rems.length)return;const now=Date.now();const newR=rems.map(r=>({id:uid(),supp:suppName,name:r.n,minutes:r.m,eff:r.eff||"",startedAt:now}));setActiveReminders(p=>[...p,...newR]);};
+const doTake=useCallback((s,cf,reminders)=>{if(cf&&cf.length){setConflWarn({s,c:cf,reminders:reminders||[]});return;}if(reminders&&reminders.length){setConflWarn({s,c:[],reminders});return;}const t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:""}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));addReminders(s.name,reminders);},[]);
+const doForce=useCallback(()=>{if(!conflWarn)return;const s=conflWarn.s,t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:"Override"}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));addReminders(s.name,conflWarn.reminders);setConflWarn(null);},[conflWarn]);
 const doUntake=useCallback(id=>{const t=tdy();setLogs(p=>{const d={...(p[t]||{})};delete d[id];return{...p,[t]:d};});setTimers(p=>{const n={...p};delete n[id+"_t"];return n;});},[]);
 const saveSup=useCallback(f=>{if(editing?.id)setSupps(p=>p.map(s=>s.id===editing.id?{...f,id:s.id}:s));else setSupps(p=>[...p,{...f,id:uid()}]);setEditing(null);setView("home");},[editing]);
 const delSup=useCallback(id=>{setSupps(p=>p.filter(s=>s.id!==id));setEditing(null);setView("home");},[]);
@@ -736,6 +763,7 @@ return <Ctx.Provider value={ctx}>
       {view==="library"&&renderLibrary()}
       {view==="settings"&&renderSettings()}
     </div>
+    {activeReminders.length>0&&<ReminderBar reminders={activeReminders} onDismiss={(ids)=>setActiveReminders(p=>p.filter(r=>!ids.includes(r.id)))}/>}
     <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,display:"flex",justifyContent:"space-around",alignItems:"flex-end",padding:"6px 0 env(safe-area-inset-bottom, 14px)",background:"rgba(255,255,255,.97)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderTop:"1px solid #F3F4F6",zIndex:100}}>
       {[{k:"home",l:"Today",e:"🏠"},{k:"history",l:"History",e:"📅"},{k:"add",l:"",e:"+",sp:true},{k:"library",l:"Library",e:"📚"},{k:"settings",l:"Settings",e:"⚙️"}].map(it=>
         <button key={it.k} onClick={()=>{if(it.k==="add")setEditing(null);setView(it.k);}}

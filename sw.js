@@ -1,5 +1,5 @@
-const CACHE='supstack-v5';
-const ASSETS=['./index-7.html','./icon-192.png','./icon-512.png','./manifest.json'];
+const CACHE='supstack-v6';
+const ASSETS=['./index.html','./index-7.html','./icon-192.png','./icon-512.png','./manifest.json'];
 
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));
@@ -13,6 +13,9 @@ self.addEventListener('activate',e=>{
 
 self.addEventListener('fetch',e=>{
   e.respondWith(
-    caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>caches.match('./index-7.html')))
+    fetch(e.request).then(r=>{
+      if(r&&r.ok){const rc=r.clone();caches.open(CACHE).then(c=>c.put(e.request,rc));}
+      return r;
+    }).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html')))
   );
 });
