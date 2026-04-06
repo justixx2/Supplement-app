@@ -95,6 +95,28 @@ const fmtT=(h,m)=>(h%12||12)+":"+String(m).padStart(2,"0")+" "+(h>=12?"PM":"AM")
 const prsT=s=>{if(!s)return null;const[t,p]=s.split(" ");let[h,m]=t.split(":").map(Number);if(p==="PM"&&h!==12)h+=12;if(p==="AM"&&h===12)h=0;return{h,m}};
 const tdy=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 function useLS(k,iv){const[v,sV]=useState(()=>{try{const x=localStorage.getItem(k);return x?JSON.parse(x):iv}catch{return iv}});useEffect(()=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}},[k,v]);return[v,sV]}
+/* fuzzy conflict name matching: "Magnesium (all forms)" matches "Mag Citrate", "Mag L-Threonate", etc. */
+const confNameMatch=(confName,suppName)=>{
+  const cn=confName.toLowerCase().replace(/\(.*?\)/g,"").trim();
+  const sn=suppName.toLowerCase();
+  if(cn===sn)return true;
+  if(sn.startsWith(cn)||cn.startsWith(sn))return true;
+  /* handle abbreviated names: "Mag" matches "Magnesium..." */
+  const cnBase=cn.split(/[\s\/,]+/)[0];
+  const snBase=sn.split(/[\s\/,]+/)[0];
+  if(cnBase.length>=3&&snBase.length>=3&&(snBase.startsWith(cnBase)||cnBase.startsWith(snBase)))return true;
+  /* handle keyword: "magnesium" in "Mag L-Threonate" by expanding common abbreviations */
+  const expand=t=>t.replace(/^mag$/i,"magnesium").replace(/^vit$/i,"vitamin");
+  const cnExp=expand(cnBase);
+  const snExp=expand(snBase);
+  if(cnExp===snExp)return true;
+  if(sn.includes(cnBase)||cn.includes(snBase))return true;
+  return false;
+};
+/* find all matching supplements for a conflict name */
+const findConflSupps=(confName,supps,excludeId)=>{
+  return supps.filter(x=>x.id!==excludeId&&confNameMatch(confName,x.name));
+};
 
 /* ─── CONTEXT ─── */
 const Ctx=createContext();
@@ -135,13 +157,18 @@ function SC({s}){
   /* bidirectional conflict check */
   const getMyConf=()=>{
     const c=[];
-    /* forward: my conflicts list */
-    if(s.confl?.length){for(const cf of s.confl){const cs=supps.find(x=>x.name===cf.n);if(!cs)continue;const tt=timers[cs.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req)c.push({name:cs.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}
-    /* reverse: other supps that list ME as conflict */
-    for(const os of supps){if(os.id===s.id||!os.confl?.length)continue;for(const cf of os.confl){if(cf.n!==s.name)continue;const tt=timers[os.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===os.name))c.push({name:os.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"Absorption may be reduced",takenAt:tt});}}
+    /* forward: my conflicts list — fuzzy match */
+    if(s.confl?.length){for(const cf of s.confl){const matches=findConflSupps(cf.n,supps,s.id);for(const cs of matches){const tt=timers[cs.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===cs.name))c.push({name:cs.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}}
+    /* reverse: other supps that list ME as conflict — fuzzy match */
+    for(const os of supps){if(os.id===s.id||!os.confl?.length)continue;for(const cf of os.confl){if(!confNameMatch(cf.n,s.name))continue;const tt=timers[os.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===os.name))c.push({name:os.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"Absorption may be reduced",takenAt:tt});}}
     return c;
   };
   const cf=getMyConf();
+  /* non-supplement reminders: conflicts that don't match any supplement in the app */
+  const reminders=useMemo(()=>{
+    if(!s.confl?.length)return[];
+    return s.confl.filter(cf=>{const matches=findConflSupps(cf.n,supps,s.id);return matches.length===0;});
+  },[s.confl,supps]);
   const done=!!tl[s.id];
   const st=done?"taken":cf.length?"blocked":(() => {if(s.times?.[0]){const t=prsT(s.times[0]);if(t){const nd=new Date(),nm=nd.getHours()*60+nd.getMinutes(),sm=t.h*60+t.m;if(nm>sm+30)return"overdue";if(nm>=sm-15&&nm<=sm+15)return"ready";}}return"pending";})();
   const cc=CC[s.cat]||"#6B7280";
@@ -177,12 +204,13 @@ function SC({s}){
           <span style={{fontSize:9,color:"#16A34A",fontWeight:600}}>{"✓"} {new Date(logEntry.time).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</span>
           <Elapsed iso={logEntry.time}/>
         </div>}
+        {done&&reminders.length>0&&<div style={{marginTop:2}}>{reminders.map((r,i)=><div key={i} style={{fontSize:9,color:"#1E40AF",background:"#EFF6FF",borderRadius:4,padding:"1px 5px",marginTop:1,display:"inline-block",marginRight:3}}>{"📋"} {r.n} — avoid {r.m}min</div>)}</div>}
       </div>
       <div style={{display:"flex",gap:3,alignItems:"center",marginLeft:6,flexShrink:0}}>
         <button onClick={()=>{setEditing(s);setView("add");}} style={{background:"none",border:"none",cursor:"pointer",padding:2,color:"#9CA3AF",fontSize:12}}>{"✏️"}</button>
         {done
           ?<button onClick={()=>doUntake(s.id)} style={{...Z.tb,width:34,height:34,background:"#4ADE80",color:"#fff",fontSize:13}}>{"✓"}</button>
-          :<button onClick={()=>doTake(s,cf)} style={{...Z.tb,width:34,height:34,background:st==="blocked"?"#FEF3C7":"#fff",color:st==="blocked"?"#D97706":"#D1D5DB",border:st==="blocked"?"2px solid #FCD34D":"2px solid #E5E7EB",fontSize:13}}>{"✓"}</button>
+          :<button onClick={()=>doTake(s,cf,reminders)} style={{...Z.tb,width:34,height:34,background:st==="blocked"?"#FEF3C7":"#fff",color:st==="blocked"?"#D97706":"#D1D5DB",border:st==="blocked"?"2px solid #FCD34D":"2px solid #E5E7EB",fontSize:13}}>{"✓"}</button>
         }
       </div>
     </div>
@@ -194,8 +222,8 @@ function SCC({s}){
   const{tl,supps,timers,doTake,doUntake}=useContext(Ctx);
   const getMyConf=()=>{
     const c=[];
-    if(s.confl?.length){for(const cf of s.confl){const cs=supps.find(x=>x.name===cf.n);if(!cs)continue;const tt=timers[cs.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req)c.push({name:cs.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}
-    for(const os of supps){if(os.id===s.id||!os.confl?.length)continue;for(const cf of os.confl){if(cf.n!==s.name)continue;const tt=timers[os.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===os.name))c.push({name:os.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}
+    if(s.confl?.length){for(const cf of s.confl){const matches=findConflSupps(cf.n,supps,s.id);for(const cs of matches){const tt=timers[cs.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===cs.name))c.push({name:cs.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}}
+    for(const os of supps){if(os.id===s.id||!os.confl?.length)continue;for(const cf of os.confl){if(!confNameMatch(cf.n,s.name))continue;const tt=timers[os.id+"_t"];if(!tt)continue;const el=(Date.now()-new Date(tt).getTime())/60000,req=cf.m||120;if(el<req&&!c.find(x=>x.name===os.name))c.push({name:os.name,rem:Math.ceil(req-el),total:req,eff:cf.eff||"",takenAt:tt});}}
     return c;
   };
   const cf=getMyConf();
@@ -203,7 +231,8 @@ function SCC({s}){
   const blocked=!done&&cf.length>0;
   const short=s.name.replace(/\(.*?\)/g,"").replace(/\/.*/,"").replace(/ (Bisglycinate|Glycinate|Picolinate|Gluconate|Citrate|Malate|Threonate|Taurate|Complex|Carnosine|Monnieri|Phosphate|Ascorbate)/gi,"").replace(/Vitamin /,"Vit ").replace(/Magnesium/,"Mag").replace(/Lactobacillus/,"L.").replace(/Saccharomyces/,"S.").replace(/N-Acetyl /,"").replace(/with /,"+ ").trim();
   const cc=CC[s.cat]||"#6B7280";
-  return <button onClick={()=>{if(done)doUntake(s.id);else doTake(s,cf);}}
+  const reminders=useMemo(()=>{if(!s.confl?.length)return[];return s.confl.filter(cf=>{const matches=findConflSupps(cf.n,supps,s.id);return matches.length===0;});},[s.confl,supps]);
+  return <button onClick={()=>{if(done)doUntake(s.id);else doTake(s,cf,reminders);}}
     style={{display:"flex",alignItems:"center",gap:3,padding:"5px 6px",borderRadius:8,border:done?"2px solid #4ADE80":blocked?"2px solid #FCD34D":"1.5px solid #E5E7EB",
       background:done?"#F0FDF4":blocked?"#FFFBEB":"#fff",cursor:"pointer",minWidth:0,flex:"1 1 calc(33.3% - 4px)",maxWidth:"calc(33.3% - 4px)",boxShadow:"0 1px 2px rgba(0,0,0,.03)"}}>
     <span style={{width:14,height:14,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,flexShrink:0,
@@ -372,7 +401,7 @@ const sorted=supps;
 const visible=sorted.filter(s=>!hiddenToday.includes(s.id));
 const taken=Object.keys(tl).length,total=supps.length,pct=total>0?Math.round(taken/total*100):0;
 
-const doTake=useCallback((s,cf)=>{if(cf&&cf.length){setConflWarn({s,c:cf});return;}const t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:""}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));},[]);
+const doTake=useCallback((s,cf,reminders)=>{if(cf&&cf.length){setConflWarn({s,c:cf,reminders:reminders||[]});return;}if(reminders&&reminders.length){setConflWarn({s,c:[],reminders});return;}const t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:""}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));},[]);
 const doForce=useCallback(()=>{if(!conflWarn)return;const s=conflWarn.s,t=tdy(),ts=new Date().toISOString();setLogs(p=>({...p,[t]:{...(p[t]||{}),[s.id]:{time:ts,note:"Override"}}}));setTimers(p=>({...p,[s.id+"_t"]:ts}));setConflWarn(null);},[conflWarn]);
 const doUntake=useCallback(id=>{const t=tdy();setLogs(p=>{const d={...(p[t]||{})};delete d[id];return{...p,[t]:d};});setTimers(p=>{const n={...p};delete n[id+"_t"];return n;});},[]);
 const saveSup=useCallback(f=>{if(editing?.id)setSupps(p=>p.map(s=>s.id===editing.id?{...f,id:s.id}:s));else setSupps(p=>[...p,{...f,id:uid()}]);setEditing(null);setView("home");},[editing]);
@@ -432,9 +461,9 @@ const renderHome=()=>{
     </div></div>}
     {conflWarn&&<div style={Z.mo}><div style={{...Z.mC,maxWidth:340}} className="su">
       <div style={{textAlign:"center",marginBottom:12}}>
-        <div style={{fontSize:32,marginBottom:5}}>{"⚠️"}</div>
-        <h3 style={{margin:"0 0 5px",fontSize:15,fontWeight:700}}>Conflict Detected</h3>
-        <p style={{fontSize:11,color:"#6B7280",margin:0}}>Taking <strong>{conflWarn.s.name}</strong> now may cause issues</p>
+        <div style={{fontSize:32,marginBottom:5}}>{conflWarn.c.length>0?"⚠️":"📋"}</div>
+        <h3 style={{margin:"0 0 5px",fontSize:15,fontWeight:700}}>{conflWarn.c.length>0?"Conflict Detected":"Reminders"}</h3>
+        <p style={{fontSize:11,color:"#6B7280",margin:0}}>{conflWarn.c.length>0?<>Taking <strong>{conflWarn.s.name}</strong> now may cause issues</>:<>Remember these when taking <strong>{conflWarn.s.name}</strong></>}</p>
       </div>
       {conflWarn.c.map((c,i)=>{const elapsed=c.total-c.rem;const pctAbsorb=Math.max(5,Math.round((elapsed/c.total)*100));
         return <div key={i} style={{background:"#FEF3C7",borderRadius:10,padding:"10px 12px",marginBottom:6}}>
@@ -445,9 +474,13 @@ const renderHome=()=>{
             <div style={{marginTop:3,height:5,background:"#FEF3C7",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:pctAbsorb+"%",background:pctAbsorb>60?"#F59E0B":"#DC2626",borderRadius:3}}/></div>
           </div>
         </div>;})}
+      {(conflWarn.reminders||[]).map((r,i)=><div key={"r"+i} style={{background:"#EFF6FF",borderRadius:10,padding:"8px 12px",marginBottom:6}}>
+        <p style={{fontSize:11,fontWeight:700,color:"#1E40AF",margin:0}}>{"📋"} {r.n} — avoid {r.m}min</p>
+        {r.eff&&<p style={{fontSize:10,color:"#1D4ED8",margin:"3px 0 0"}}>{r.eff}</p>}
+      </div>)}
       <div style={{display:"flex",gap:8,marginTop:12}}>
-        <button onClick={()=>setConflWarn(null)} style={{...Z.pb,background:"#E5E7EB",color:"#374151"}}>Wait</button>
-        <button onClick={doForce} style={{...Z.pb,background:"#F59E0B",color:"#fff"}}>Take Anyway</button>
+        {conflWarn.c.length>0&&<button onClick={()=>setConflWarn(null)} style={{...Z.pb,background:"#E5E7EB",color:"#374151"}}>Wait</button>}
+        <button onClick={doForce} style={{...Z.pb,background:conflWarn.c.length>0?"#F59E0B":"#4ADE80",color:"#fff"}}>{conflWarn.c.length>0?"Take Anyway":"Got it, Take"}</button>
       </div>
     </div></div>}
     {(()=>{const orderedStacks=stacks.filter(sk=>sgs[sk.id]);return compact?<div>
