@@ -756,7 +756,7 @@ STACKS: group supplements by when/how
 return <Ctx.Provider value={ctx}>
 <div style={{height:"100vh",display:"flex",justifyContent:"center",background:"#F5F5F0",overflow:"hidden"}}>
   <div style={{width:"100%",maxWidth:480,height:"100vh",background:"#FAFAF8",position:"relative",display:"flex",flexDirection:"column",boxShadow:"0 0 40px rgba(0,0,0,.08)",overflow:"hidden"}}>
-    <div ref={cRef} style={{flex:1,overflowY:"auto",padding:"20px 14px 96px",WebkitOverflowScrolling:"touch"}}>
+    <div ref={cRef} style={{flex:1,overflowY:"auto",padding:"20px 14px "+(activeReminders.length>0?"160px":"96px"),WebkitOverflowScrolling:"touch"}}>
       {view==="home"&&renderHome()}
       {view==="history"&&renderHistory()}
       {view==="add"&&<SF key={editing?.id||"new"} init={editing} onSave={saveSup} onDel={delSup} onBack={()=>{setEditing(null);setView("home");}} supps={supps} stacks={stacks}/>}
